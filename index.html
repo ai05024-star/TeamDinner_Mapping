@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>영업제도파트 회식 매핑사이트</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet Map JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Leaflet Popups 커스텀 프리미엄 스타일링 */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 4px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 8px 12px;
+        }
+        .leaflet-container {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        /* 스크롤바 숨김 스타일링 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center space-x-2">
+            <span class="text-emerald-600 bg-emerald-50 p-2 rounded-xl">
+                <!-- Map Pin SVG -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </span>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-gray-900">영업제도파트 회식 매핑사이트</h1>
+                <p class="text-xs text-gray-400">여의도에서 회식 장소를 정하는 건 쉬운 것 같으면서도 어렵다</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <!-- 가게 추가 (Gemini AI & Cloud Firestore 연동) -->
+            <button onclick="openAddModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md transition flex items-center space-x-1">
+                <span>➕ 가게 추가 (AI)</span>
+            </button>
+            <div class="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg text-xs font-semibold">
+                <button id="view-list-tab" onclick="switchView('list')" class="px-3 py-1.5 rounded-md bg-white text-gray-800 shadow-sm transition">목록뷰</button>
+                <button id="view-compare-tab" onclick="switchView('compare')" class="px-3 py-1.5 rounded-md text-gray-500 hover:text-gray-800 transition">비교매트릭스</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Map Component Wrapper -->
+    <section class="relative w-full bg-gray-200 shadow-inner overflow-hidden transition-all duration-300" id="map-container" style="height: 380px;">
+        <div id="map" class="w-full h-full z-10"></div>
+        
+        <!-- Quick Stats Floating bar -->
+        <div class="absolute bottom-4 left-4 right-4 z-20 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-xl flex items-center justify-between border border-white/20">
+            <div class="flex items-center space-x-3">
+                <span class="text-xs text-gray-500 font-medium">등록된 회식 장소</span>
+                <span id="filtered-count" class="text-base font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">8곳</span>
+            </div>
+            <button onclick="resetMapBounds()" class="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg font-semibold flex items-center space-x-1 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                </svg>
+                <span>전체 지도 맞춤</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-5 flex flex-col space-y-4">
+
+        <!-- Category Horizontal Filters (Pills) -->
+        <div id="filter-section" class="flex overflow-x-auto py-1 space-x-2 no-scrollbar">
+            <button onclick="filterCategory('전체')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-gray-900 text-white shadow-sm whitespace-nowrap transition">
+                전체보기
+            </button>
+            <button onclick="filterCategory('한식')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🍚 한식
+            </button>
+            <button onclick="filterCategory('중식')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🍜 중식
+            </button>
+            <button onclick="filterCategory('일식')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🍣 일식
+            </button>
+            <button onclick="filterCategory('양식')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🍝 양식
+            </button>
+            <button onclick="filterCategory('육류(돼지고기)')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🐖 육류(돼지고기)
+            </button>
+            <button onclick="filterCategory('육류(소고기)')" class="category-btn px-4 py-2 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:border-gray-300 whitespace-nowrap transition">
+                🐂 육류(소고기)
+            </button>
+        </div>
+
+        <!-- VIEW 1: LIST VIEW -->
+        <div id="list-view-container" class="space-y-4">
+            <div class="text-sm font-semibold text-gray-400 px-1">식당 리스트</div>
+            <div id="restaurants-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Javascript가 동적으로 식당 카드를 삽입합니다 -->
+            </div>
+        </div>
+
+        <!-- VIEW 2: COMPARE VIEW -->
+        <div id="compare-view-container" class="hidden space-y-4">
+            <!-- 5) 비교매트릭스 필터 추가 및 4) "⚡ 스마트 매트릭스 필터" >> "필터" 변경 -->
+            <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+                <div class="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center space-x-1.5">
+                    <span>필터</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <!-- 카테고리 필터 -->
+                    <div>
+                        <label class="block text-xs text-gray-500 font-semibold mb-1">음식 카테고리</label>
+                        <select id="compare-filter-category" onchange="filterCompareTable()" class="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-2.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                            <option value="전체">전체 보기</option>
+                            <option value="한식">🍚 한식</option>
+                            <option value="중식">🍜 중식</option>
+                            <option value="일식">🍣 일식</option>
+                            <option value="양식">🍝 양식</option>
+                            <option value="육류(돼지고기)">🐖 육류(돼지고기)</option>
+                            <option value="육류(소고기)">🐂 육류(소고기)</option>
+                        </select>
+                    </div>
+                    <!-- 가격 예산 한도 필터 및 3) 5000원 스텝 & 최솟값 제한 설정 -->
+                    <div>
+                        <label class="block text-xs text-gray-500 font-semibold mb-1">1인당 최대 허용 예산 (원)</label>
+                        <input type="number" id="compare-filter-price" oninput="filterCompareTable()" step="5000" min="0" placeholder="예: 30000 (공란 시 무제한)" class="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-2.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-sm font-semibold text-gray-400 px-1 flex justify-between items-center">
+                <span>한눈에 비교하는 회식 맛집 명세서</span>
+                <span class="text-xs text-emerald-600" id="matrix-filtered-count"></span>
+            </div>
+            
+            <div class="overflow-x-auto border border-gray-200 rounded-2xl bg-white shadow-sm">
+                <table class="w-full text-left border-collapse min-w-[650px]">
+                    <thead>
+                        <tr class="bg-gray-100 border-b border-gray-200">
+                            <th class="p-4 text-xs font-bold uppercase text-gray-600 tracking-wider">이름</th>
+                            <th class="p-4 text-xs font-bold uppercase text-gray-600 tracking-wider">카테고리</th>
+                            <th class="p-4 text-xs font-bold uppercase text-gray-600 tracking-wider">메인 메뉴</th>
+                            <th class="p-4 text-xs font-bold uppercase text-gray-600 tracking-wider">1인당 예상 가격대</th>
+                            <th class="p-4 text-xs font-bold uppercase text-gray-600 tracking-wider">회사와의 거리 (직선)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="compare-table-body" class="divide-y divide-gray-100 text-sm">
+                        <!-- Javascript가 동적으로 비교 테이블 행을 삽입합니다 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-100 py-6 px-4 mt-8 text-center text-xs text-gray-400">
+        <p class="font-semibold text-gray-500 mb-1">영업제도파트 회식 매핑사이트</p>
+        <p>식당 정보 및 상세 내역은 매장 사정에 따라 상이할 수 있습니다.</p>
+        <p class="mt-2 text-xs font-medium text-gray-500">©전인화 사원</p>
+    </footer>
+
+    <!-- Custom Floating Alert Modal instead of window.alert -->
+    <div id="alert-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hidden transition-all duration-300">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl transform scale-95 transition-all">
+            <div class="text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-gray-900" id="alert-title">안내</h3>
+                <p class="text-sm text-gray-500 mt-2 whitespace-pre-line" id="alert-message">안내문구내용</p>
+            </div>
+            <div class="mt-6">
+                <button onclick="closeAlert()" class="w-full inline-flex justify-center rounded-xl border border-transparent shadow-sm px-4 py-2.5 bg-emerald-600 text-base font-semibold text-white hover:bg-emerald-700 focus:outline-none sm:text-sm">
+                    확인
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gemini AI Add Restaurant Modal -->
+    <div id="add-restaurant-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden transition-all duration-300">
+        <div class="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl transform scale-95 transition-all">
+            <!-- Modal Header -->
+            <div class="bg-emerald-600 px-6 py-4 text-white flex justify-between items-center">
+                <h3 class="text-base font-bold">새로운 회식 장소 추가 (Gemini AI)</h3>
+                <button onclick="closeAddModal()" class="text-white/80 hover:text-white transition focus:outline-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-6 space-y-4">
+                <!-- Step 1: Input and Search -->
+                <div id="add-step-input" class="space-y-4">
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        여의도 내의 식당명을 정확히 입력해 주세요. 제미나이 AI가 구글 실시간 검색을 통해 위도/경도와 상세 주소, 메뉴, 가격대를 정밀하게 찾아내어 클라우드 DB에 추가합니다.
+                    </p>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">식당명 입력</label>
+                        <input type="text" id="add-restaurant-input" placeholder="예: 화해당 여의도점, 창고43 여의도점" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                    </div>
+                    <button onclick="performAISearch()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm flex items-center justify-center space-x-2 text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span>제미나이 AI 실시간 검색</span>
+                    </button>
+                </div>
+
+                <!-- Loading View -->
+                <div id="add-step-loading" class="hidden py-8 flex flex-col items-center justify-center space-y-4 text-center">
+                    <div class="relative w-12 h-12">
+                        <div class="absolute inset-0 rounded-full border-4 border-emerald-100"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-t-emerald-600 animate-spin"></div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-900 text-sm">여의도 맛집 실시간 정보 조회 중...</h4>
+                        <p class="text-xs text-gray-400 mt-1">구글 검색 그라운딩을 이용해 최신 정보를 빌드하고 있습니다.</p>
+                    </div>
+                </div>
+
+                <!-- Step 2: Confirmation -->
+                <div id="add-step-confirm" class="hidden space-y-4">
+                    <div class="bg-emerald-50 text-emerald-800 p-4 rounded-2xl border border-emerald-100">
+                        <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-1">조회 완료</div>
+                        <h4 id="confirm-name" class="text-base font-bold text-gray-900">식당 이름</h4>
+                        <p id="confirm-address" class="text-xs text-gray-600 mt-1 font-medium">주소: 로딩 완료된 주소</p>
+                    </div>
+
+                    <div class="space-y-2 border-t border-b border-gray-100 py-3 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">카테고리 분류:</span>
+                            <span id="confirm-group" class="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">육류(소고기)</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">상세 분류:</span>
+                            <span id="confirm-category" class="font-bold text-gray-800">우대갈비 전문점</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">대표 시그니처:</span>
+                            <span id="confirm-menu" class="font-bold text-gray-800">우대갈비</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">예상 가격대:</span>
+                            <span id="confirm-price" class="font-bold text-gray-800">3만원대</span>
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] text-gray-400 text-center">조회된 가게 정보를 확인하고 사이트에 추가하려면 [확인]을 눌러주세요.</p>
+
+                    <div class="flex space-x-2">
+                        <button onclick="confirmAndAddRestaurant()" class="flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-sm text-sm">
+                            확인 (공동 DB 저장)
+                        </button>
+                        <button onclick="resetAddModal()" class="px-4 py-3 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200 transition text-sm">
+                            재검색
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Block containing complete application logic & raw data -->
+    <script type="module">
+        // Firebase SDK standard ESM imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 회사 본점 건물 주소: "서울 영등포구 여의도동 여의대로 56" (전경련회관 / FKI Tower 좌표 기준)
+        const COMPANY_LAT = 37.5220;
+        const COMPANY_LNG = 126.9242;
+
+        // 초기의 고품격 맛집 8곳 설정 (카테고리 전면 리뉴얼 및 1인당 단가 숫자 필드 추가)
+        const defaultRestaurants = [
+            {
+                id: 1,
+                name: "흑돈가 여의도점",
+                group: "육류(돼지고기)",
+                category: "제주 흑돼지 전문점",
+                lat: 37.5218,
+                lng: 126.9312,
+                mainMenu: "제주흑돼지 생구이 (150g)",
+                price: "21,000원",
+                priceNumeric: 21000,
+                priceLevel: "2~3만원 대",
+                badgeColor: "rose",
+                rating: 4.6,
+                address: "서울 영등포구 여의대방로69길 23",
+                reviews: [
+                    "멜젓에 찍어 먹는 고기 두께와 참숯 화력이 기가 막힙니다. 매장이 상당히 넓어서 여의도 최고의 회식 명소!",
+                    "껍데기까지 아주 쫀득하게 씹히는 매력이 최고예요."
+                ]
+            },
+            {
+                id: 2,
+                name: "여의화로 본점",
+                group: "육류(돼지고기)",
+                category: "프리미엄 화로구이",
+                lat: 37.5211,
+                lng: 126.9285,
+                mainMenu: "숙성 삼겹살 (150g)",
+                price: "18,000원",
+                priceNumeric: 18000,
+                priceLevel: "2~3만원 대",
+                badgeColor: "rose",
+                rating: 4.8,
+                address: "서울 영등포구 국제금융로8길 19",
+                reviews: [
+                    "고풍스러운 인테리어에 서버분들이 고기를 완벽한 굽기로 구워줍니다. 육즙 가득 머금은 최강 삼겹살!",
+                    "반찬 구성이 깔끔하고 정갈해서 연인끼리 방문하기 아주 훌륭합니다."
+                ]
+            },
+            {
+                id: 3,
+                name: "여의돈",
+                group: "육류(돼지고기)",
+                category: "솥뚜껑 미나리 삼겹살",
+                lat: 37.5222,
+                lng: 126.9205,
+                mainMenu: "솥뚜껑 삼겹살 (180g)",
+                price: "17,000원",
+                priceNumeric: 17000,
+                priceLevel: "1~2만원 대",
+                badgeColor: "rose",
+                rating: 4.5,
+                address: "서울 영등포구 여의대방로67길 9",
+                reviews: [
+                    "향긋한 청도 미나리와 솥뚜껑 위에 푸짐하게 올라가는 김치 조합이 꿀맛입니다.",
+                    "가성비가 뛰어나며, 고기 먹은 후 먹는 치즈 볶음밥은 필수 코스입니다."
+                ]
+            },
+            {
+                id: 4,
+                name: "무월 여의도원센티널점",
+                group: "한식",
+                category: "모던 한식 다이닝 & 막걸리 바",
+                lat: 37.5255,
+                lng: 126.9215,
+                mainMenu: "한방바베큐보쌈",
+                price: "28,000원",
+                priceNumeric: 28000,
+                priceLevel: "2~4만원 대",
+                badgeColor: "indigo",
+                rating: 4.7,
+                address: "서울 영등포구 의사당대로 147 원센티널빌딩 2층",
+                reviews: [
+                    "은은하고 힙한 조명 분위기 덕분에 데이트나 소개팅 성지입니다. 수제 막걸리 라인업이 최고예요.",
+                    "한방 바베큐 보쌈이 아주 야들야들하며, 플레이팅 자체가 정말 깔끔하고 예쁩니다."
+                ]
+            },
+            {
+                id: 5,
+                name: "여의도미나리삼겹 서여의도점",
+                group: "육류(돼지고기)",
+                category: "미나리 삼겹살 전문점",
+                lat: 37.5298,
+                lng: 126.9185,
+                mainMenu: "미나리 오겹살 (150g)",
+                price: "18,000원",
+                priceNumeric: 18000,
+                priceLevel: "1~2만원 대",
+                badgeColor: "rose",
+                rating: 4.6,
+                address: "서울 영등포구 국회대로72길 11",
+                reviews: [
+                    "미나리가 무한 리필되어 기름지지 않고 아삭하게 즐길 수 있는 직장인 원픽 삼겹살 맛집!",
+                    "서여의도 국회 근처라 접근성이 좋고, 미나리 전도 함께 시켜 드시면 최고입니다."
+                ]
+            },
+            {
+                id: 6,
+                name: "전설의우대갈비 여의도직영점",
+                group: "육류(소고기)",
+                category: "프리미엄 우대갈비 전문",
+                lat: 37.5202,
+                lng: 126.9272,
+                mainMenu: "전설우대갈비 (370g)",
+                price: "39,000원",
+                priceNumeric: 39000,
+                priceLevel: "4만원 이상 대",
+                badgeColor: "amber",
+                rating: 4.9,
+                address: "서울 영등포구 여의대방로65길 6",
+                reviews: [
+                    "두툼한 우대갈비가 눈앞에서 알맞게 해체되어 구워집니다. 극상의 고소함과 부드러움을 자랑함.",
+                    "프라이빗 룸이 마련되어 있어 가족 모임이나 격식 있는 미팅 하기에 최적입니다."
+                ]
+            },
+            {
+                id: 7,
+                name: "백원중식당",
+                group: "중식",
+                category: "고급 정통 중식당",
+                lat: 37.5285,
+                lng: 126.9198,
+                mainMenu: "삼선짜장면 / 전가복",
+                price: "9,000원",
+                priceNumeric: 9000,
+                priceLevel: "1~5만원 대",
+                badgeColor: "purple",
+                rating: 4.6,
+                address: "서울 영등포구 국회대로74길 9",
+                reviews: [
+                    "국회 근처 미팅하기 아주 훌륭한 고품격 중식당. 짜장과 짬뽕 면발이 탱글하고 탕수육 소스가 깔끔합니다.",
+                    "개별 룸이 잘 꾸며져 있어 비즈니스 런치 코스로 아주 유용합니다."
+                ]
+            },
+            {
+                id: 8,
+                name: "삼보정",
+                group: "한식",
+                category: "한식 / 부대찌개 & 삼겹살",
+                lat: 37.5282,
+                lng: 126.9192,
+                mainMenu: "부대찌개 / 냉삼",
+                price: "11,000원",
+                priceNumeric: 11000,
+                priceLevel: "1~2만원 대",
+                badgeColor: "indigo",
+                rating: 4.4,
+                address: "서울 영등포구 국회대로70길 18",
+                reviews: [
+                    "여의도 터줏대감 맛집. 칼칼하고 얼큰한 부대찌개 양념이 인상적이고, 밑반찬이 집밥처럼 맛있습니다.",
+                    "가볍고 가성비 좋게 식사 한 끼 든든히 먹고 싶을 때 고민 없이 찾는 식당."
+                ]
+            }
+        ];
+
+        // 클라우드 동기화 상태 및 메모리 보관함
+        let restaurants = JSON.parse(JSON.stringify(defaultRestaurants)); // 로컬 즉시 대응용 초기 로드
+        let map;
+        let mapMarkers = [];
+        let activeCategory = '전체';
+        let tempSearchedRestaurant = null;
+
+        // Firebase 연동 변수 선언
+        let app, auth, db, appId;
+
+        // 직선 거리 연산을 위한 하버사인(Haversine) 기하 공식 함수
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // 지구의 반지름 (미터 단위)
+            const r1 = lat1 * Math.PI / 180;
+            const r2 = lat2 * Math.PI / 180;
+            const dr = (lat2 - lat1) * Math.PI / 180;
+            const dl = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(dr / 2) * Math.sin(dr / 2) +
+                      Math.cos(r1) * Math.cos(r2) *
+                      Math.sin(dl / 2) * Math.sin(dl / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c; // 미터 거리 반환
+        }
+
+        // 거리 출력 텍스트 정밀 포맷터
+        function formatDistance(d) {
+            if (d < 1000) {
+                return Math.round(d) + "m";
+            } else {
+                return (d / 1000).toFixed(1) + "km";
+            }
+        }
+
+        // Custom Custom Alert Modal trigger
+        function showAlert(title, message) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-message').innerText = message;
+            const modal = document.getElementById('alert-modal');
+            modal.classList.remove('hidden');
+        }
+
+        function closeAlert() {
+            document.getElementById('alert-modal').classList.add('hidden');
+        }
+
+        // Color badge utility function for re-categorized groups
+        function getBadgeStyles(colorName) {
+            switch(colorName) {
+                case 'rose': return 'bg-rose-50 text-rose-700 border-rose-200';
+                case 'indigo': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                case 'amber': return 'bg-amber-50 text-amber-700 border-amber-200';
+                case 'purple': return 'bg-purple-50 text-purple-700 border-purple-200';
+                case 'teal': return 'bg-teal-50 text-teal-700 border-teal-200';
+                case 'orange': return 'bg-orange-50 text-orange-700 border-orange-200';
+                default: return 'bg-gray-50 text-gray-700 border-gray-200';
+            }
+        }
+
+        // Initialize Map centered strictly at Yeouido
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false, 
+                tap: false 
+            }).setView([COMPANY_LAT, COMPANY_LNG], 14);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            L.control.zoom({
+                position: 'topright'
+            }).addTo(map);
+
+            renderMarkers();
+        }
+
+        // Render markers based on current filter state
+        function renderMarkers() {
+            // Clear previous markers
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+
+            const filtered = restaurants.filter(r => activeCategory === '전체' || r.group === activeCategory);
+
+            filtered.forEach(r => {
+                // Determine marker color based on category group
+                let colorClass = '#10B981'; // Default Emerald
+                if (r.group === '육류(돼지고기)') colorClass = '#F43F5E'; // Rose
+                if (r.group === '육류(소고기)') colorClass = '#F59E0B'; // Amber
+                if (r.group === '한식') colorClass = '#6366F1'; // Indigo
+                if (r.group === '중식') colorClass = '#A855F7'; // Purple
+                if (r.group === '일식') colorClass = '#0D9488'; // Teal
+                if (r.group === '양식') colorClass = '#EA580C'; // Orange
+
+                // Custom SVG Marker Icon
+                const customIcon = L.divIcon({
+                    html: `
+                        <div class="relative flex items-center justify-center">
+                            <span class="absolute text-[10px] font-bold text-white mb-2 z-10">${r.id}</span>
+                            <svg width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M17 0C7.61116 0 0 7.61116 0 17C0 26.3888 17 42 17 42C17 42 34 26.3888 34 17C34 7.61116 26.3888 0 17 0Z" fill="${colorClass}"/>
+                                <circle cx="17" cy="15" r="9" fill="white" fill-opacity="0.25"/>
+                            </svg>
+                        </div>
+                    `,
+                    className: '',
+                    iconSize: [34, 42],
+                    iconAnchor: [17, 42],
+                    popupAnchor: [0, -40]
+                });
+
+                const marker = L.marker([r.lat, r.lng], { icon: customIcon }).addTo(map);
+
+                // Build rich custom popup HTML
+                const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
+                const distStr = formatDistance(dist);
+
+                const popupContent = `
+                    <div class="text-xs max-w-xs leading-relaxed">
+                        <div class="flex items-center space-x-1 mb-1">
+                            <span class="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-bold">${r.id}</span>
+                            <span class="font-bold text-gray-900 text-sm">${r.name}</span>
+                        </div>
+                        <p class="text-[11px] text-emerald-600 font-semibold mb-1">${r.category} • 회사에서 ${distStr}</p>
+                        <p class="text-gray-500 mb-2"><strong class="text-gray-700">대표메뉴:</strong> ${r.mainMenu}</p>
+                        <div class="flex space-x-1.5">
+                            <button onclick="focusOnCard(${r.id})" class="bg-gray-900 text-white font-bold px-2.5 py-1 rounded text-[10px] shadow-sm hover:bg-gray-800 transition">상세 카드 보기</button>
+                            <button onclick="openExternalDirections('${r.name}')" class="bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-1 rounded border border-emerald-200 text-[10px] hover:bg-emerald-100 transition">길찾기</button>
+                        </div>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+                mapMarkers.push(marker);
+            });
+        }
+
+        // Fit map bounds to contain all active markers
+        function resetMapBounds() {
+            if (mapMarkers.length === 0) return;
+            const group = new L.featureGroup(mapMarkers);
+            map.fitBounds(group.getBounds().pad(0.15));
+        }
+
+        // Navigation Switching View (List / Compare Matrix)
+        function switchView(viewType) {
+            const listTab = document.getElementById('view-list-tab');
+            const compareTab = document.getElementById('view-compare-tab');
+            const listView = document.getElementById('list-view-container');
+            const compareView = document.getElementById('compare-view-container');
+            const mapContainer = document.getElementById('map-container');
+            const filterSection = document.getElementById('filter-section');
+
+            if (viewType === 'list') {
+                listTab.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                listTab.classList.remove('text-gray-500');
+                compareTab.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
+                compareTab.classList.add('text-gray-500');
+                
+                listView.classList.remove('hidden');
+                compareView.classList.add('hidden');
+                mapContainer.style.height = "380px";
+                filterSection.classList.remove('pointer-events-none', 'opacity-30');
+                setTimeout(() => { map.invalidateSize(); resetMapBounds(); }, 310);
+            } else {
+                compareTab.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                compareTab.classList.remove('text-gray-500');
+                listTab.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
+                listTab.classList.add('text-gray-500');
+
+                compareView.classList.remove('hidden');
+                listView.classList.add('hidden');
+                mapContainer.style.height = "0px"; 
+                filterSection.classList.add('pointer-events-none', 'opacity-30'); 
+                
+                // 비교 매트릭스 탭 초기화 및 그리기
+                filterCompareTable();
+            }
+        }
+
+        // Filter functionality
+        function filterCategory(categoryName) {
+            activeCategory = categoryName;
+
+            const buttons = document.querySelectorAll('.category-btn');
+            buttons.forEach(btn => {
+                if (btn.innerText.includes(categoryName) || (categoryName === '전체' && btn.innerText.includes('전체보기'))) {
+                    btn.classList.add('bg-gray-900', 'text-white', 'shadow-sm');
+                    btn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+                } else {
+                    btn.classList.remove('bg-gray-900', 'text-white', 'shadow-sm');
+                    btn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+                }
+            });
+
+            renderRestaurants();
+            renderMarkers();
+            
+            setTimeout(() => {
+                resetMapBounds();
+            }, 100);
+        }
+
+        // Scroll to specific restaurant card and bounce marker
+        function focusOnCard(id) {
+            map.closePopup();
+
+            const element = document.getElementById(`restaurant-card-${id}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('ring-2', 'ring-emerald-500', 'scale-[1.02]');
+                setTimeout(() => {
+                    element.classList.remove('ring-2', 'ring-emerald-500', 'scale-[1.02]');
+                }, 2000);
+            }
+        }
+
+        // Map pan directly linked to card actions
+        function panToRestaurant(id, lat, lng) {
+            map.setView([lat, lng], 16);
+            
+            const filteredIndex = restaurants.filter(r => activeCategory === '전체' || r.group === activeCategory).findIndex(r => r.id === id);
+            if (filteredIndex !== -1 && mapMarkers[filteredIndex]) {
+                mapMarkers[filteredIndex].openPopup();
+            }
+            
+            document.getElementById('map-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 5) 길찾기/경로 -> 네이버 지도 서비스 연동으로 변경
+        function openExternalDirections(name) {
+            const destinationUrl = `https://map.naver.com/v5/search/${encodeURIComponent(name)}`;
+            window.open(destinationUrl, '_blank');
+        }
+
+        // Add Restaurant Modal controller
+        function openAddModal() {
+            resetAddModal();
+            document.getElementById('add-restaurant-modal').classList.remove('hidden');
+        }
+
+        function closeAddModal() {
+            document.getElementById('add-restaurant-modal').classList.add('hidden');
+        }
+
+        function resetAddModal() {
+            document.getElementById('add-step-input').classList.remove('hidden');
+            document.getElementById('add-step-loading').classList.add('hidden');
+            document.getElementById('add-step-confirm').classList.add('hidden');
+            document.getElementById('add-restaurant-input').value = '';
+            tempSearchedRestaurant = null;
+        }
+
+        // Gemini API Real-time Search Integration with Google Search Grounding & Structured Schema output
+        async function performAISearch() {
+            const queryText = document.getElementById('add-restaurant-input').value.trim();
+            if (!queryText) {
+                showAlert("입력 필요", "검색하고 싶으신 여의도 식당 이름을 채워주세요.");
+                return;
+            }
+
+            document.getElementById('add-step-input').classList.add('hidden');
+            document.getElementById('add-step-loading').classList.remove('hidden');
+
+            try {
+                const apiKey = ""; 
+                const model = "gemini-2.5-flash-preview-09-2025";
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+                const systemPrompt = `You are a professional local dining guide assistant for Yeouido, Seoul, South Korea.
+You must find and return detailed, real-world data about the specified restaurant in Yeouido.
+To ensure coordinates (latitude and longitude), prices, and menus are highly accurate, you MUST use Google Search grounding.
+Your response MUST be a valid JSON object matching the requested schema exactly.
+If the restaurant cannot be found in Yeouido, search for its branch closest to Yeouido or fallback gracefully with standard Yeouido coordinates [37.524, 126.924] and matching address.
+The field "group" must be exactly one of these six categories: "한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)". Choose the best match.`;
+
+                const userQuery = `Find details for "${queryText}" located in Yeouido, Seoul. Extract name, exact address, real latitude, real longitude, best mainMenu, real typical price (numeric integer like 18000), general price level, and 2 real user reviews. Choose the most appropriate group from: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"].`;
+
+                const payload = {
+                    contents: [{
+                        parts: [{ text: userQuery }]
+                    }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    tools: [{ "google_search": {} }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                name: { type: "STRING" },
+                                address: { type: "STRING" },
+                                lat: { type: "NUMBER" },
+                                lng: { type: "NUMBER" },
+                                group: { 
+                                    type: "STRING", 
+                                    enum: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"] 
+                                },
+                                category: { type: "STRING" },
+                                mainMenu: { type: "STRING" },
+                                price: { type: "STRING" },
+                                priceNumeric: { type: "NUMBER" },
+                                priceLevel: { type: "STRING" },
+                                reviews: {
+                                    type: "ARRAY",
+                                    items: { type: "STRING" }
+                                }
+                            },
+                            required: ["name", "address", "lat", "lng", "group", "category", "mainMenu", "price", "priceNumeric", "priceLevel", "reviews"]
+                        }
+                    }
+                };
+
+                // Exponential backoff for API robustness
+                let delay = 1000;
+                let responseData = null;
+                for (let i = 0; i < 5; i++) {
+                    try {
+                        const response = await fetch(url, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        if (response.ok) {
+                            responseData = await response.json();
+                            break;
+                        }
+                    } catch (err) {
+                        // ignore and retry
+                    }
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
+                }
+
+                if (!responseData) {
+                    throw new Error("API call failed after retries.");
+                }
+
+                const resultJsonText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!resultJsonText) {
+                    throw new Error("No data received from Gemini.");
+                }
+
+                const rData = JSON.parse(resultJsonText);
+
+                // Set Badge Color based on AI matched group
+                let badgeColor = "indigo";
+                if (rData.group === "육류(돼지고기)") badgeColor = "rose";
+                if (rData.group === "육류(소고기)") badgeColor = "amber";
+                if (rData.group === "중식") badgeColor = "purple";
+                if (rData.group === "일식") badgeColor = "teal";
+                if (rData.group === "양식") badgeColor = "orange";
+
+                // Build temp object
+                tempSearchedRestaurant = {
+                    id: restaurants.length + 1,
+                    name: rData.name || queryText,
+                    group: rData.group || "한식",
+                    category: rData.category || "일반 음식점",
+                    lat: parseFloat(rData.lat) || 37.524,
+                    lng: parseFloat(rData.lng) || 126.924,
+                    mainMenu: rData.mainMenu || "대표 시그니처 메뉴",
+                    price: rData.price || "가격 변동",
+                    priceNumeric: parseInt(rData.priceNumeric) || 15000,
+                    priceLevel: rData.priceLevel || "미정",
+                    badgeColor: badgeColor,
+                    rating: 4.5,
+                    address: rData.address || "서울 영등포구 여의도동",
+                    reviews: rData.reviews && rData.reviews.length > 0 ? rData.reviews : ["제미나이가 추천하는 우수 식당입니다.", "훌륭한 한 끼 식사 명소."]
+                };
+
+                // Show confirmation layout fields
+                document.getElementById('confirm-name').innerText = tempSearchedRestaurant.name;
+                document.getElementById('confirm-address').innerText = `주소: ${tempSearchedRestaurant.address}`;
+                document.getElementById('confirm-group').innerText = tempSearchedRestaurant.group;
+                document.getElementById('confirm-category').innerText = tempSearchedRestaurant.category;
+                document.getElementById('confirm-menu').innerText = tempSearchedRestaurant.mainMenu;
+                document.getElementById('confirm-price').innerText = `${tempSearchedRestaurant.priceLevel} (${tempSearchedRestaurant.price})`;
+
+                // Render views
+                document.getElementById('add-step-loading').classList.add('hidden');
+                document.getElementById('add-step-confirm').classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('add-step-loading').classList.add('hidden');
+                document.getElementById('add-step-input').classList.remove('hidden');
+                showAlert("검색 오류", "입력한 정보를 기반으로 회식 정보를 찾을 수 없습니다. 상호를 다시 한 번 확인해 주세요.");
+            }
+        }
+
+        // Confirmed to save in list with Firebase Firestore integration
+        async function confirmAndAddRestaurant() {
+            if (!tempSearchedRestaurant) return;
+
+            try {
+                // RULE 3: auth guard
+                if (!auth.currentUser) {
+                    showAlert("인증 에러", "데이터베이스 인증을 진행 중입니다. 잠시 후 다시 확인을 눌러주세요.");
+                    return;
+                }
+
+                // RULE 1: Strict collection path
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'restaurants', tempSearchedRestaurant.id.toString());
+                await setDoc(docRef, tempSearchedRestaurant);
+
+                closeAddModal();
+                showAlert("가게 추가 완료 🎉", `공동 데이터베이스에 '${tempSearchedRestaurant.name}' 맛집이 저장되었습니다! 다른 접속자도 함께 확인 가능합니다.`);
+            } catch (e) {
+                console.error("Firestore Write Error: ", e);
+                showAlert("저장 실패", "클라우드 데이터베이스 저장에 실패했습니다. (룰 위반 또는 통신 불안정)");
+            }
+        }
+
+        // Draw and inject Restaurants Cards in main list
+        function renderRestaurants() {
+            const filtered = restaurants.filter(r => activeCategory === '전체' || r.group === activeCategory);
+            
+            // Update counter badge
+            document.getElementById('filtered-count').innerText = `${filtered.length}곳`;
+
+            const gridContainer = document.getElementById('restaurants-grid');
+
+            // 1. Build List Cards
+            gridContainer.innerHTML = '';
+            if (filtered.length === 0) {
+                gridContainer.innerHTML = `
+                    <div class="col-span-full py-12 text-center text-gray-500 font-medium">
+                        선택된 카테고리에 해당하는 맛집이 없습니다.
+                    </div>
+                `;
+            } else {
+                filtered.forEach(r => {
+                    const badgeClass = getBadgeStyles(r.badgeColor);
+                    
+                    // 직선거리 연산
+                    const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
+                    const distStr = formatDistance(dist);
+
+                    let reviewListHtml = '';
+                    r.reviews.forEach(rev => {
+                        reviewListHtml += `
+                            <li class="flex items-start text-xs text-gray-600 space-x-1.5">
+                                <span class="text-emerald-500 mt-0.5">✔</span>
+                                <span>${rev}</span>
+                            </li>
+                        `;
+                    });
+
+                    // 2) 회사와의 거리 정보를 우측 상단 "별점" 아래로 배치
+                    const cardHtml = `
+                        <div id="restaurant-card-${r.id}" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-md">
+                            <div class="p-5">
+                                <!-- Badge and rating/distance column row -->
+                                <div class="flex justify-between items-start mb-3">
+                                    <span class="px-2.5 py-1 text-xs font-bold rounded-lg border ${badgeClass}">
+                                        ${r.group} (${r.category})
+                                    </span>
+                                    
+                                    <!-- 우측 상단 별점 및 거리 배치 -->
+                                    <div class="flex flex-col items-end space-y-1">
+                                        <!-- 별점 -->
+                                        <div class="flex items-center space-x-1 text-amber-500">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
+                                            <span class="text-sm font-bold text-gray-900">${r.rating}</span>
+                                        </div>
+                                        <!-- 회사와의 거리 (새 위치) -->
+                                        <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 whitespace-nowrap">
+                                            🏢 ${distStr}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Restaurant Main Info -->
+                                <h3 class="text-lg font-bold text-gray-900 mb-1 flex items-center space-x-1.5">
+                                    <span class="text-sm text-white bg-gray-800 px-2 py-0.5 rounded-md font-mono">${r.id}</span>
+                                    <span>${r.name}</span>
+                                </h3>
+                                
+                                <p class="text-xs text-gray-400 mb-4 flex items-center space-x-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    </svg>
+                                    <span class="truncate">${r.address}</span>
+                                </p>
+
+                                <div class="bg-gray-50 rounded-xl p-3 mb-4 space-y-1.5 text-xs">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-500 font-medium">주요 시그니처:</span>
+                                        <span class="text-gray-900 font-bold">${r.mainMenu}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-500 font-medium">가격대 (1인당):</span>
+                                        <span class="text-gray-900 font-semibold">${r.priceLevel} (${r.price.split(' / ')[0]})</span>
+                                    </div>
+                                </div>
+
+                                <!-- Review Block -->
+                                <div class="space-y-1">
+                                    <div class="text-xs font-bold text-gray-400 mb-1">인기 방문자리뷰</div>
+                                    <ul class="space-y-1.5">
+                                        ${reviewListHtml}
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Bottom Action Bar -->
+                            <div class="grid grid-cols-2 border-t border-gray-100 bg-gray-50/50">
+                                <button onclick="panToRestaurant(${r.id}, ${r.lat}, ${r.lng})" class="py-3 text-center text-xs font-bold text-gray-600 hover:text-emerald-600 transition flex items-center justify-center space-x-1.5 border-r border-gray-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                    </svg>
+                                    <span>지도로 위치보기</span>
+                                </button>
+                                <button onclick="openExternalDirections('${r.name}')" class="py-3 text-center text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/40 transition flex items-center justify-center space-x-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                    </svg>
+                                    <span>길찾기/경로</span>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    gridContainer.innerHTML += cardHtml;
+                });
+            }
+        }
+
+        // 비교매트릭스 다차원 필터링 및 그리기 기능
+        function filterCompareTable() {
+            const selectedCategory = document.getElementById('compare-filter-category').value;
+            let maxPriceVal = document.getElementById('compare-filter-price').value.trim();
+            
+            // 3) 0원 미만 차단 제어 로직
+            if (maxPriceVal !== "" && parseInt(maxPriceVal) < 0) {
+                document.getElementById('compare-filter-price').value = 0;
+                maxPriceVal = "0";
+            }
+            
+            const maxPrice = maxPriceVal ? parseInt(maxPriceVal) : Infinity;
+
+            const filtered = restaurants.filter(r => {
+                const matchesCategory = (selectedCategory === '전체' || r.group === selectedCategory);
+                const matchesPrice = (!r.priceNumeric || r.priceNumeric <= maxPrice);
+                return matchesCategory && matchesPrice;
+            });
+
+            // 매치 개수 갱신
+            document.getElementById('matrix-filtered-count').innerText = `검색 결과: ${filtered.length}건`;
+
+            const tableBody = document.getElementById('compare-table-body');
+            tableBody.innerHTML = '';
+            
+            if (filtered.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="p-8 text-center text-gray-400 text-xs">
+                            필터 조건에 부합하는 회식 장소가 없습니다.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            filtered.forEach(r => {
+                const badgeClass = getBadgeStyles(r.badgeColor);
+                const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
+                const distStr = formatDistance(dist);
+                
+                const tableRowHtml = `
+                    <tr class="hover:bg-gray-50/60 transition">
+                        <td class="p-4 whitespace-nowrap font-bold text-gray-900 flex items-center space-x-2">
+                            <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-mono">${r.id}</span>
+                            <span>${r.name}</span>
+                        </td>
+                        <td class="p-4 whitespace-nowrap">
+                            <span class="px-2 py-0.5 text-xs font-bold rounded-lg border ${badgeClass}">
+                                ${r.group}
+                            </span>
+                        </td>
+                        <td class="p-4 font-semibold text-gray-800">${r.mainMenu}</td>
+                        <td class="p-4 whitespace-nowrap text-gray-500 font-medium">${r.priceLevel} <span class="text-xs text-gray-400">(${r.price})</span></td>
+                        <td class="p-4 whitespace-nowrap text-emerald-600 font-bold">${distStr}</td>
+                    </tr>
+                `;
+                tableBody.innerHTML += tableRowHtml;
+            });
+        }
+
+        // Firebase 연동 & 데이터 동기화 (RULE 3 - Auth Before Queries)
+        async function startDatabaseSync() {
+            try {
+                // Config Load
+                let firebaseConfig;
+                try {
+                    firebaseConfig = JSON.parse(__firebase_config);
+                } catch (err) {
+                    console.error("Firebase config parse error", err);
+                    return;
+                }
+
+                // Initialize services
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                // RULE 3 - Custom auth token or anonymous token
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    try {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } catch(e) {
+                        await signInAnonymously(auth);
+                    }
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Auth status changed handler
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'restaurants');
+                        
+                        // Seed default data if DB collection is empty
+                        try {
+                            const snapshot = await getDocs(colRef);
+                            if (snapshot.empty) {
+                                for (const r of defaultRestaurants) {
+                                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'restaurants', r.id.toString()), r);
+                                }
+                            }
+                        } catch (initErr) {
+                            console.error("Database seed error", initErr);
+                        }
+
+                        // Realtime snapshot subscription (RULE 2: Fetch all and sort/filter in JS memory)
+                        onSnapshot(colRef, (snapshot) => {
+                            const list = [];
+                            snapshot.forEach(docSnap => {
+                                list.push(docSnap.data());
+                            });
+                            
+                            // ID 순서대로 정비례 정렬
+                            list.sort((a, b) => a.id - b.id);
+                            
+                            restaurants.length = 0;
+                            restaurants.push(...list);
+                            
+                            renderRestaurants();
+                            renderMarkers();
+                            filterCompareTable();
+                        }, (error) => {
+                            console.error("Firestore live update error: ", error);
+                        });
+                    }
+                });
+
+            } catch (err) {
+                console.error("Firebase startup crash", err);
+            }
+        }
+
+        // Global functions mapped to window for inline onclick accessibility
+        window.switchView = switchView;
+        window.filterCategory = filterCategory;
+        window.resetMapBounds = resetMapBounds;
+        window.focusOnCard = focusOnCard;
+        window.panToRestaurant = panToRestaurant;
+        window.openExternalDirections = openExternalDirections;
+        window.openAddModal = openAddModal;
+        window.closeAddModal = closeAddModal;
+        window.resetAddModal = resetAddModal;
+        window.performAISearch = performAISearch;
+        window.confirmAndAddRestaurant = confirmAndAddRestaurant;
+        window.closeAlert = closeAlert;
+        window.filterCompareTable = filterCompareTable;
+
+        // App Initializer
+        window.onload = function() {
+            initMap();
+            renderRestaurants();
+            filterCompareTable();
+            
+            // Start Cloud Database Sync
+            startDatabaseSync();
+
+            // Set Initial Bounds Focus over Yeouido
+            setTimeout(() => {
+                resetMapBounds();
+            }, 500);
+
+            // Greet visitor
+            setTimeout(() => {
+                showAlert("영업제도파트 미식 가이드", "실시간 클라우드 DB 연계가 완료되었습니다!\n이제 추가하신 맛집은 회사의 다른 팀원분들에게도 실시간으로 연동되어 함께 열람할 수 있습니다. 🏢");
+            }, 800);
+        };
+    </script>
+</body>
+</html>
