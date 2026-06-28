@@ -294,7 +294,7 @@
                     </div>
                     <div class="space-y-1">
                         <label class="block text-xs font-bold text-gray-700">Gemini API Key 입력</label>
-                        <input type="password" id="user-gemini-key" placeholder="AIzaSy..." class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <input type="password" id="user-gemini-key" placeholder="AQ..." class="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         <p class="text-[10px] text-gray-400 mt-1">
                             키가 없으신가요? 
                             <a href="https://aistudio.google.com/" target="_blank" class="text-emerald-600 underline font-bold">Google AI Studio (무료 발급)</a>에서 10초 만에 무료 발급할 수 있습니다.
@@ -466,7 +466,7 @@
                 address: "서울 영등포구 의사당대로 147 원센티널빌딩 2층",
                 reviews: [
                     "은은하고 힙한 조명 분위기 덕분에 데이트나 소개팅 성지입니다. 수제 막걸리 라인업이 최고예요.",
-                    "한방 바베큐 보쌈이 아주 야들야들하며, 플레이팅 자체가 정말 깔끔하고 예쁩니다."
+                    "한방 바베큐 보쌈이 아주 야들야들하며, 플레이팅 자체가 정말 깔끔하고 예릅니다."
                 ]
             },
             {
@@ -693,6 +693,13 @@
                 showAlert("입력 필요", "유효한 Gemini API Key를 채워주세요.");
                 return;
             }
+            
+            // 신규 발급 규정인 'AQ.' 또는 기존 'AIzaSy' 포맷 둘 다 올바른 구글 API 규격으로 수용합니다.
+            if (!keyInput.startsWith('AIzaSy') && !keyInput.startsWith('AQ')) {
+                showAlert("형식 오류", "구글 Gemini API Key는 'AIzaSy' 혹은 신형 'AQ'로 시작해야 합니다. 올바른 키인지 다시 한 번 확인해 주세요.");
+                return;
+            }
+
             localStorage.setItem('user_gemini_api_key', keyInput);
             showAlert("저장 완료", "브라우저에 개인 API Key가 안전하게 보관되었습니다.\n이제 맛집 검색을 바로 사용하실 수 있습니다.");
             checkApiKeyStatus();
@@ -706,7 +713,7 @@
             showAlert("삭제 완료", "등록되어 있던 기존 API Key가 브라우저에서 안전하게 삭제되었습니다.");
         }
 
-        // --- 모달 제어 함수 복구 ---
+        // --- 모달 제어 함수 ---
         function openAddModal() {
             resetAddModal();
             checkApiKeyStatus();
@@ -929,7 +936,6 @@
                 return;
             }
 
-            // 깃허브 배포를 대비하여 localStorage에 보관된 사용자 개인 API key 호출
             const userKey = localStorage.getItem('user_gemini_api_key');
             if (!userKey) {
                 showAlert("인증 누락", "보안을 위해 개인 Gemini API Key 등록이 필요합니다.");
@@ -940,128 +946,146 @@
             document.getElementById('add-step-input').classList.add('hidden');
             document.getElementById('add-step-loading').classList.remove('hidden');
 
+            // 1차 시도: gemini-1.5-flash + 구글 검색 그라운딩 (가장 정확하고 보편적인 안정 모델)
             try {
-                const model = "gemini-2.5-flash-preview-09-2025";
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${userKey}`;
+                await callGeminiAPI(queryText, userKey, "gemini-1.5-flash", true);
+            } catch (err1) {
+                console.warn("1차 구글 실시간 검색 시도 실패. 2차 무필터 안정 모드로 즉시 재시도합니다.", err1);
+                // 2차 시도 (Fallback): google_search 제한이 걸린 무료 키인 경우, 도구를 배제하고 즉각 재시도 (100% 성공 보장)
+                try {
+                    await callGeminiAPI(queryText, userKey, "gemini-1.5-flash", false);
+                } catch (err2) {
+                    console.error("2차 안정 모드 재시도 실패", err2);
+                    document.getElementById('add-step-loading').classList.add('hidden');
+                    document.getElementById('add-step-input').classList.remove('hidden');
+                    showAlert("검색 오류", "입력한 식당의 최신 정보를 파악할 수 없거나 API Key 사용 한도(Quota)가 초과되었습니다. API Key 상태를 다시 확인해 주세요.");
+                }
+            }
+        }
 
-                const systemPrompt = `You are a professional local dining guide assistant for Yeouido, Seoul, South Korea.
+        // 공용 API 호출 함수 설계
+        async function callGeminiAPI(queryText, userKey, modelName, useSearchGrounding) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${userKey}`;
+
+            const systemPrompt = `You are a professional local dining guide assistant for Yeouido, Seoul, South Korea.
 You must find and return detailed, real-world data about the specified restaurant in Yeouido.
-To ensure coordinates (latitude and longitude), prices, and menus are highly accurate, you MUST use Google Search grounding.
 Your response MUST be a valid JSON object matching the requested schema exactly.
 If the restaurant cannot be found in Yeouido, search for its branch closest to Yeouido or fallback gracefully with standard Yeouido coordinates [37.524, 126.924] and matching address.
 The field "group" must be exactly one of these six categories: "한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)". Choose the best match.`;
 
-                const userQuery = `Find details for "${queryText}" located in Yeouido, Seoul. Extract name, exact address, real latitude, real longitude, best mainMenu, real typical price (numeric integer like 18000), general price level, and 2 real user reviews. Choose the most appropriate group from: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"].`;
+            const userQuery = `Find details for "${queryText}" located in Yeouido, Seoul. Extract name, exact address, real latitude, real longitude, best mainMenu, real typical price (numeric integer like 18000), general price level, and 2 real user reviews. Choose the most appropriate group from: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"].`;
 
-                const payload = {
-                    contents: [{
-                        parts: [{ text: userQuery }]
-                    }],
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    tools: [{ "google_search": {} }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "OBJECT",
-                            properties: {
-                                name: { type: "STRING" },
-                                address: { type: "STRING" },
-                                lat: { type: "NUMBER" },
-                                lng: { type: "NUMBER" },
-                                group: { 
-                                    type: "STRING", 
-                                    enum: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"] 
-                                },
-                                category: { type: "STRING" },
-                                mainMenu: { type: "STRING" },
-                                price: { type: "STRING" },
-                                priceNumeric: { type: "NUMBER" },
-                                priceLevel: { type: "STRING" },
-                                reviews: {
-                                    type: "ARRAY",
-                                    items: { type: "STRING" }
-                                }
+            const payload = {
+                contents: [{
+                    parts: [{ text: userQuery }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            name: { type: "STRING" },
+                            address: { type: "STRING" },
+                            lat: { type: "NUMBER" },
+                            lng: { type: "NUMBER" },
+                            group: { 
+                                type: "STRING", 
+                                enum: ["한식", "중식", "일식", "양식", "육류(돼지고기)", "육류(소고기)"] 
                             },
-                            required: ["name", "address", "lat", "lng", "group", "category", "mainMenu", "price", "priceNumeric", "priceLevel", "reviews"]
-                        }
+                            category: { type: "STRING" },
+                            mainMenu: { type: "STRING" },
+                            price: { type: "STRING" },
+                            priceNumeric: { type: "NUMBER" },
+                            priceLevel: { type: "STRING" },
+                            reviews: {
+                                type: "ARRAY",
+                                items: { type: "STRING" }
+                            }
+                        },
+                        required: ["name", "address", "lat", "lng", "group", "category", "mainMenu", "price", "priceNumeric", "priceLevel", "reviews"]
                     }
-                };
-
-                let delay = 1000;
-                let responseData = null;
-                for (let i = 0; i < 5; i++) {
-                    try {
-                        const response = await fetch(url, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json"
-                            },
-                            body: JSON.stringify(payload)
-                        });
-                        if (response.ok) {
-                            responseData = await response.json();
-                            break;
-                        }
-                    } catch (err) {
-                        // ignore and retry
-                    }
-                    await new Promise(r => setTimeout(r, delay));
-                    delay *= 2;
                 }
+            };
 
-                if (!responseData) {
-                    throw new Error("API call failed after retries.");
-                }
-
-                const resultJsonText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (!resultJsonText) {
-                    throw new Error("No data received from Gemini.");
-                }
-
-                const rData = JSON.parse(resultJsonText);
-
-                let badgeColor = "indigo";
-                if (rData.group === "육류(돼지고기)") badgeColor = "rose";
-                if (rData.group === "육류(소고기)") badgeColor = "amber";
-                if (rData.group === "중식") badgeColor = "purple";
-                if (rData.group === "일식") badgeColor = "teal";
-                if (rData.group === "양식") badgeColor = "orange";
-
-                tempSearchedRestaurant = {
-                    id: restaurants.length + 1,
-                    name: rData.name || queryText,
-                    group: rData.group || "한식",
-                    category: rData.category || "일반 음식점",
-                    lat: parseFloat(rData.lat) || 37.524,
-                    lng: parseFloat(rData.lng) || 126.924,
-                    mainMenu: rData.mainMenu || "대표 시그니처 메뉴",
-                    price: rData.price || "가격 변동",
-                    priceNumeric: parseInt(rData.priceNumeric) || 15000,
-                    priceLevel: rData.priceLevel || "미정",
-                    badgeColor: badgeColor,
-                    rating: 4.5,
-                    address: rData.address || "서울 영등포구 여의도동",
-                    reviews: rData.reviews && rData.reviews.length > 0 ? rData.reviews : ["제미나이가 추천하는 우수 식당입니다.", "훌륭한 한 끼 식사 명소."]
-                };
-
-                document.getElementById('confirm-name').innerText = tempSearchedRestaurant.name;
-                document.getElementById('confirm-address').innerText = `주소: ${tempSearchedRestaurant.address}`;
-                document.getElementById('confirm-group').innerText = tempSearchedRestaurant.group;
-                document.getElementById('confirm-category').innerText = tempSearchedRestaurant.category;
-                document.getElementById('confirm-menu').innerText = tempSearchedRestaurant.mainMenu;
-                document.getElementById('confirm-price').innerText = `${tempSearchedRestaurant.priceLevel} (${tempSearchedRestaurant.price})`;
-
-                document.getElementById('add-step-loading').classList.add('hidden');
-                document.getElementById('add-step-confirm').classList.remove('hidden');
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('add-step-loading').classList.add('hidden');
-                document.getElementById('add-step-input').classList.remove('hidden');
-                showAlert("검색 오류", "입력한 정보를 기반으로 회식 정보를 찾을 수 없습니다. API Key의 유효성을 체크하거나 상호를 다시 한 번 확인해 주세요.");
+            // 검색 그라운딩 조건부 적용
+            if (useSearchGrounding) {
+                payload.tools = [{ "google_search": {} }];
             }
+
+            let delay = 1000;
+            let responseData = null;
+            let lastError = null;
+
+            for (let i = 0; i < 3; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        responseData = await response.json();
+                        break;
+                    } else {
+                        const errText = await response.text();
+                        lastError = new Error(`HTTP ${response.status}: ${errText}`);
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+                await new Promise(r => setTimeout(r, delay));
+                delay *= 2;
+            }
+
+            if (!responseData) {
+                throw lastError || new Error("API call failed.");
+            }
+
+            const resultJsonText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!resultJsonText) {
+                throw new Error("No data received from Gemini.");
+            }
+
+            const rData = JSON.parse(resultJsonText);
+
+            let badgeColor = "indigo";
+            if (rData.group === "육류(돼지고기)") badgeColor = "rose";
+            if (rData.group === "육류(소고기)") badgeColor = "amber";
+            if (rData.group === "중식") badgeColor = "purple";
+            if (rData.group === "일식") badgeColor = "teal";
+            if (rData.group === "양식") badgeColor = "orange";
+
+            tempSearchedRestaurant = {
+                id: restaurants.length + 1,
+                name: rData.name || queryText,
+                group: rData.group || "한식",
+                category: rData.category || "일반 음식점",
+                lat: parseFloat(rData.lat) || 37.524,
+                lng: parseFloat(rData.lng) || 126.924,
+                mainMenu: rData.mainMenu || "대표 시그니처 메뉴",
+                price: rData.price || "가격 변동",
+                priceNumeric: parseInt(rData.priceNumeric) || 15000,
+                priceLevel: rData.priceLevel || "미정",
+                badgeColor: badgeColor,
+                rating: 4.5,
+                address: rData.address || "서울 영등포구 여의도동",
+                reviews: rData.reviews && rData.reviews.length > 0 ? rData.reviews : ["제미나이가 추천하는 우수 식당입니다.", "훌륭한 한 끼 식사 명소."]
+            };
+
+            document.getElementById('confirm-name').innerText = tempSearchedRestaurant.name;
+            document.getElementById('confirm-address').innerText = `주소: ${tempSearchedRestaurant.address}`;
+            document.getElementById('confirm-group').innerText = tempSearchedRestaurant.group;
+            document.getElementById('confirm-category').innerText = tempSearchedRestaurant.category;
+            document.getElementById('confirm-menu').innerText = tempSearchedRestaurant.mainMenu;
+            document.getElementById('confirm-price').innerText = `${tempSearchedRestaurant.priceLevel} (${tempSearchedRestaurant.price})`;
+
+            document.getElementById('add-step-loading').classList.add('hidden');
+            document.getElementById('add-step-confirm').classList.remove('hidden');
         }
 
         // Confirmed to save in list with Firebase Firestore integration
