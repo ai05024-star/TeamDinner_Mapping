@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <!-- Leaflet Map JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- html2canvas for generating image reports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             font-family: 'Noto Sans KR', sans-serif;
@@ -39,7 +41,41 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
+<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen overflow-hidden">
+
+    <!-- 4-Digit Password Protection Overlay -->
+    <div id="security-overlay" class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-gray-950/95 backdrop-blur-md transition-all duration-500">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-8 shadow-2xl border border-gray-100 text-center space-y-6">
+            <div class="space-y-2">
+                <div class="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-emerald-50 text-emerald-600">
+                    <!-- Lock Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-black text-gray-900">보안 인증</h2>
+                <p class="text-xs text-gray-400 font-medium">영업제도파트 회식 매핑사이트 접속을 위해<br>보안 비밀번호 4자리를 입력해주세요.</p>
+            </div>
+
+            <!-- Password Form Area -->
+            <div class="space-y-4">
+                <div class="relative">
+                    <input type="password" id="site-passcode" maxlength="4" placeholder="••••" autocomplete="off"
+                           class="w-full text-center text-2xl font-bold tracking-[1em] pl-[1em] py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all">
+                </div>
+                <!-- 힌트 제공 영역 -->
+                <div class="bg-amber-50 rounded-xl p-3 border border-amber-100 text-left">
+                    <p class="text-[11px] text-amber-800 font-bold flex items-center">
+                        <span class="mr-1">💡</span> 힌트
+                    </p>
+                    <p class="text-[10px] text-amber-700 font-medium mt-0.5">잔여수수료 파일 비번과 동일함</p>
+                </div>
+                <button onclick="validatePassword()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-emerald-600/10 transition flex items-center justify-center space-x-1.5 text-sm">
+                    <span>접속하기</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Header Navigation -->
     <header class="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -88,7 +124,7 @@
     </section>
 
     <!-- Main Content Area -->
-    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-5 flex flex-col space-y-4">
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-5 flex flex-col space-y-4 overflow-y-auto">
 
         <!-- Category Horizontal Filters (Pills) -->
         <div id="filter-section" class="flex overflow-x-auto py-1 space-x-2 no-scrollbar">
@@ -125,8 +161,8 @@
 
         <!-- VIEW 2: COMPARE VIEW -->
         <div id="compare-view-container" class="hidden space-y-4">
-            <!-- 5) 비교매트릭스 필터 추가 및 4) "⚡ 스마트 매트릭스 필터" >> "필터" 변경 -->
-            <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+            <!-- 비교매트릭스 필터 (카테고리 선택 및 최대 가격대 입력) -->
+            <div id="compare-filters-panel" class="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
                 <div class="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center space-x-1.5">
                     <span>필터</span>
                 </div>
@@ -144,7 +180,7 @@
                             <option value="육류(소고기)">🐂 육류(소고기)</option>
                         </select>
                     </div>
-                    <!-- 가격 예산 한도 필터 및 3) 5000원 스텝 & 최솟값 제한 설정 -->
+                    <!-- 가격 예산 한도 필터 및 5000원 스텝 & 최솟값 제한 설정 -->
                     <div>
                         <label class="block text-xs text-gray-500 font-semibold mb-1">1인당 최대 허용 예산 (원)</label>
                         <input type="number" id="compare-filter-price" oninput="filterCompareTable()" step="5000" min="0" placeholder="예: 30000 (공란 시 무제한)" class="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-2.5 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
@@ -152,12 +188,35 @@
                 </div>
             </div>
 
-            <div class="text-sm font-semibold text-gray-400 px-1 flex justify-between items-center">
+            <!-- Header of Matrix with Image Download Button -->
+            <div class="text-sm font-semibold text-gray-400 px-1 flex justify-between items-center flex-wrap gap-2">
                 <span>한눈에 비교하는 회식 맛집 명세서</span>
-                <span class="text-xs text-emerald-600" id="matrix-filtered-count"></span>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-emerald-600 font-bold" id="matrix-filtered-count"></span>
+                    <button onclick="exportMatrixToImage()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow transition flex items-center space-x-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                        </svg>
+                        <span>📥 이미지 저장 (보고서용)</span>
+                    </button>
+                </div>
             </div>
             
-            <div class="overflow-x-auto border border-gray-200 rounded-2xl bg-white shadow-sm">
+            <!-- Export Wrapper targeting the table visually for clean formatting -->
+            <div id="pdf-report-area" class="overflow-x-auto border border-gray-200 rounded-2xl bg-white shadow-sm p-0.5">
+                <!-- PDF Hidden Header Header (only displayed on export) -->
+                <div id="pdf-header-title" class="hidden p-6 border-b border-gray-100 bg-gray-50">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h2 class="text-xl font-extrabold text-gray-900">영업제도파트 회식 맛집 비교분석 명세서</h2>
+                            <p class="text-xs text-gray-500 mt-1">기준지 주소: 서울 영등포구 여의도동 여의대로 56 (회사 본점 기준)</p>
+                        </div>
+                        <!-- 실시간 출력 일시 표기 영역 -->
+                        <div class="text-right">
+                            <span id="pdf-export-date" class="text-xs text-gray-400 font-medium"></span>
+                        </div>
+                    </div>
+                </div>
                 <table class="w-full text-left border-collapse min-w-[650px]">
                     <thead>
                         <tr class="bg-gray-100 border-b border-gray-200">
@@ -178,13 +237,13 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-white border-t border-gray-100 py-6 px-4 mt-8 text-center text-xs text-gray-400">
+    <footer class="bg-white border-t border-gray-100 py-6 px-4 text-center text-xs text-gray-400">
         <p class="font-semibold text-gray-500 mb-1">영업제도파트 회식 매핑사이트</p>
         <p>식당 정보 및 상세 내역은 매장 사정에 따라 상이할 수 있습니다.</p>
         <p class="mt-2 text-xs font-medium text-gray-500">©전인화 사원</p>
     </footer>
 
-    <!-- Custom Floating Alert Modal instead of window.alert -->
+    <!-- Custom Floating Alert Modal -->
     <div id="alert-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hidden transition-all duration-300">
         <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl transform scale-95 transition-all">
             <div class="text-center">
@@ -297,6 +356,9 @@
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // 1) 보안 인증 패스코드 설정 (요청하신 비밀번호 0057로 변경 완료)
+        const CORRECT_PASSWORD = "0057"; 
+
         // 회사 본점 건물 주소: "서울 영등포구 여의도동 여의대로 56" (전경련회관 / FKI Tower 좌표 기준)
         const COMPANY_LAT = 37.5220;
         const COMPANY_LNG = 126.9242;
@@ -308,8 +370,8 @@
                 name: "흑돈가 여의도점",
                 group: "육류(돼지고기)",
                 category: "제주 흑돼지 전문점",
-                lat: 37.5218,
-                lng: 126.9312,
+                lat: 37.5205,
+                lng: 126.9320,
                 mainMenu: "제주흑돼지 생구이 (150g)",
                 price: "21,000원",
                 priceNumeric: 21000,
@@ -327,8 +389,8 @@
                 name: "여의화로 본점",
                 group: "육류(돼지고기)",
                 category: "프리미엄 화로구이",
-                lat: 37.5211,
-                lng: 126.9285,
+                lat: 37.5204,
+                lng: 126.9304,
                 mainMenu: "숙성 삼겹살 (150g)",
                 price: "18,000원",
                 priceNumeric: 18000,
@@ -337,7 +399,7 @@
                 rating: 4.8,
                 address: "서울 영등포구 국제금융로8길 19",
                 reviews: [
-                    "고풍스러운 인테리어에 서버분들이 고기를 완벽한 굽기로 구워줍니다. 육즙 가득 머금은 최강 삼겹살!",
+                    "고기 맛뿐만 아니라 정갈하게 구워 나오는 서비스가 예술입니다. 분위기가 좋아 연말 파티나 모임에 제격!",
                     "반찬 구성이 깔끔하고 정갈해서 연인끼리 방문하기 아주 훌륭합니다."
                 ]
             },
@@ -346,8 +408,8 @@
                 name: "여의돈",
                 group: "육류(돼지고기)",
                 category: "솥뚜껑 미나리 삼겹살",
-                lat: 37.5222,
-                lng: 126.9205,
+                lat: 37.5201,
+                lng: 126.9306,
                 mainMenu: "솥뚜껑 삼겹살 (180g)",
                 price: "17,000원",
                 priceNumeric: 17000,
@@ -365,8 +427,8 @@
                 name: "무월 여의도원센티널점",
                 group: "한식",
                 category: "모던 한식 다이닝 & 막걸리 바",
-                lat: 37.5255,
-                lng: 126.9215,
+                lat: 37.5221,
+                lng: 126.9248,
                 mainMenu: "한방바베큐보쌈",
                 price: "28,000원",
                 priceNumeric: 28000,
@@ -384,8 +446,8 @@
                 name: "여의도미나리삼겹 서여의도점",
                 group: "육류(돼지고기)",
                 category: "미나리 삼겹살 전문점",
-                lat: 37.5298,
-                lng: 126.9185,
+                lat: 37.5301,
+                lng: 126.9187,
                 mainMenu: "미나리 오겹살 (150g)",
                 price: "18,000원",
                 priceNumeric: 18000,
@@ -403,8 +465,8 @@
                 name: "전설의우대갈비 여의도직영점",
                 group: "육류(소고기)",
                 category: "프리미엄 우대갈비 전문",
-                lat: 37.5202,
-                lng: 126.9272,
+                lat: 37.5199,
+                lng: 126.9307,
                 mainMenu: "전설우대갈비 (370g)",
                 price: "39,000원",
                 priceNumeric: 39000,
@@ -413,7 +475,7 @@
                 rating: 4.9,
                 address: "서울 영등포구 여의대방로65길 6",
                 reviews: [
-                    "두툼한 우대갈비가 눈앞에서 알맞게 해체되어 구워집니다. 극상의 고소함과 부드러움을 자랑함.",
+                    "두툼한 우대갈비가 눈앞에서 알맞게 해체되어 구워집니다. 극상의 고소함 and 부드러움을 자랑함.",
                     "프라이빗 룸이 마련되어 있어 가족 모임이나 격식 있는 미팅 하기에 최적입니다."
                 ]
             },
@@ -422,8 +484,8 @@
                 name: "백원중식당",
                 group: "중식",
                 category: "고급 정통 중식당",
-                lat: 37.5285,
-                lng: 126.9198,
+                lat: 37.5310,
+                lng: 126.9191,
                 mainMenu: "삼선짜장면 / 전가복",
                 price: "9,000원",
                 priceNumeric: 9000,
@@ -441,8 +503,8 @@
                 name: "삼보정",
                 group: "한식",
                 category: "한식 / 부대찌개 & 삼겹살",
-                lat: 37.5282,
-                lng: 126.9192,
+                lat: 37.5302,
+                lng: 126.9172,
                 mainMenu: "부대찌개 / 냉삼",
                 price: "11,000원",
                 priceNumeric: 11000,
@@ -458,7 +520,7 @@
         ];
 
         // 클라우드 동기화 상태 및 메모리 보관함
-        let restaurants = JSON.parse(JSON.stringify(defaultRestaurants)); // 로컬 즉시 대응용 초기 로드
+        let restaurants = JSON.parse(JSON.stringify(defaultRestaurants)); 
         let map;
         let mapMarkers = [];
         let activeCategory = '전체';
@@ -504,6 +566,78 @@
             document.getElementById('alert-modal').classList.add('hidden');
         }
 
+        // 패스코드 검증 및 웹페이지 권한 처리 로직
+        function validatePassword() {
+            const inputVal = document.getElementById('site-passcode').value;
+            if (inputVal === CORRECT_PASSWORD) {
+                // 비번 일치시 모달 페이드아웃 및 스크롤 봉인 해제
+                const overlay = document.getElementById('security-overlay');
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+                document.body.classList.remove('overflow-hidden');
+                
+                // 지도 정밀 렌더링 갱신
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    map.invalidateSize();
+                    resetMapBounds();
+                }, 510);
+            } else {
+                showAlert("보안 인증 실패", "비밀번호가 올바르지 않습니다.\n패스코드를 확인해 주세요.");
+                document.getElementById('site-passcode').value = '';
+                document.getElementById('site-passcode').focus();
+            }
+        }
+
+        // 비교 매트릭스 이미지(PNG) 다운로드 생성 기능 (보고서용 뷰 세팅)
+        function exportMatrixToImage() {
+            const pdfHeader = document.getElementById('pdf-header-title');
+            const targetElement = document.getElementById('pdf-report-area');
+            const dateSpan = document.getElementById('pdf-export-date');
+            
+            // 2) 실시간 출력 일시 생성 및 회색 텍스트 바인딩
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const formattedDate = `${yyyy}.${mm}.${dd} ${hh}:${min}`;
+            
+            dateSpan.innerText = `출력 일시: ${formattedDate}`;
+
+            // 임시로 보고서 전용 헤더 타이틀 표시 활성화
+            pdfHeader.classList.remove('hidden');
+
+            // 1) 모바일 캡처 시 가로 스크롤 영역 축소로 인한 깨짐/카테고리 텍스트 밀림 현상 방지
+            // 일시적으로 캡처 컨테이너의 가로 길이를 강제 데스크톱 와이드 해상도(1024px)로 고정시킵니다.
+            const originalStyle = targetElement.style.cssText;
+            targetElement.style.width = '1024px';
+            targetElement.style.minWidth = '1024px';
+
+            // html2canvas를 이용하여 고해상도 이미지 촬영
+            html2canvas(targetElement, {
+                useCORS: true,
+                scale: 2, // 모바일 가독성을 고려한 고해상도 보정 배율 (200% 정밀도 확보)
+                backgroundColor: "#ffffff",
+                windowWidth: 1024 // 가상 윈도우 너비를 넉넉하게 지정하여 일그러짐 완전 예방
+            }).then(canvas => {
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `영업제도파트_회식_맛집_명세서_${yyyy}${mm}${dd}.png`;
+                link.href = dataUrl;
+                link.click();
+                
+                // 캡처 완료 즉시 레이아웃 원상 복구 및 헤더 숨김 처리
+                targetElement.style.cssText = originalStyle;
+                pdfHeader.classList.add('hidden');
+            }).catch(err => {
+                console.error("Image Export Error: ", err);
+                targetElement.style.cssText = originalStyle;
+                pdfHeader.classList.add('hidden');
+                showAlert("저장 실패", "이미지 파일 변환에 실패했습니다.");
+            });
+        }
+
         // Color badge utility function for re-categorized groups
         function getBadgeStyles(colorName) {
             switch(colorName) {
@@ -517,15 +651,18 @@
             }
         }
 
-        // Initialize Map centered strictly at Yeouido
+        // Initialize Map centered strictly at Yeouido (VWorld Map Integration)
         function initMap() {
             map = L.map('map', {
                 zoomControl: false, 
                 tap: false 
-            }).setView([COMPANY_LAT, COMPANY_LNG], 14);
+            }).setView([COMPANY_LAT, COMPANY_LNG], 15);
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                attribution: '© OpenStreetMap contributors'
+            // 국토교통부 브이월드(VWorld) 한글 정밀 지도 타일 탑재 (지하철 출구, 상세 건물명 100% 매핑)
+            L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
+                attribution: '© VWorld Spatial Info Platform',
+                minZoom: 6,
+                maxZoom: 19
             }).addTo(map);
 
             L.control.zoom({
@@ -545,13 +682,13 @@
 
             filtered.forEach(r => {
                 // Determine marker color based on category group
-                let colorClass = '#10B981'; // Default Emerald
-                if (r.group === '육류(돼지고기)') colorClass = '#F43F5E'; // Rose
-                if (r.group === '육류(소고기)') colorClass = '#F59E0B'; // Amber
-                if (r.group === '한식') colorClass = '#6366F1'; // Indigo
-                if (r.group === '중식') colorClass = '#A855F7'; // Purple
-                if (r.group === '일식') colorClass = '#0D9488'; // Teal
-                if (r.group === '양식') colorClass = '#EA580C'; // Orange
+                let colorClass = '#10B981'; 
+                if (r.group === '육류(돼지고기)') colorClass = '#F43F5E'; 
+                if (r.group === '육류(소고기)') colorClass = '#F59E0B'; 
+                if (r.group === '한식') colorClass = '#6366F1'; 
+                if (r.group === '중식') colorClass = '#A855F7'; 
+                if (r.group === '일식') colorClass = '#0D9488'; 
+                if (r.group === '양식') colorClass = '#EA580C'; 
 
                 // Custom SVG Marker Icon
                 const customIcon = L.divIcon({
@@ -572,7 +709,6 @@
 
                 const marker = L.marker([r.lat, r.lng], { icon: customIcon }).addTo(map);
 
-                // Build rich custom popup HTML
                 const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
                 const distStr = formatDistance(dist);
 
@@ -688,7 +824,7 @@
             document.getElementById('map-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
-        // 5) 길찾기/경로 -> 네이버 지도 서비스 연동으로 변경
+        // 길찾기/경로 -> 네이버 지도 서비스 연동
         function openExternalDirections(name) {
             const destinationUrl = `https://map.naver.com/v5/search/${encodeURIComponent(name)}`;
             window.open(destinationUrl, '_blank');
@@ -773,7 +909,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                     }
                 };
 
-                // Exponential backoff for API robustness
                 let delay = 1000;
                 let responseData = null;
                 for (let i = 0; i < 5; i++) {
@@ -807,7 +942,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
 
                 const rData = JSON.parse(resultJsonText);
 
-                // Set Badge Color based on AI matched group
                 let badgeColor = "indigo";
                 if (rData.group === "육류(돼지고기)") badgeColor = "rose";
                 if (rData.group === "육류(소고기)") badgeColor = "amber";
@@ -815,7 +949,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 if (rData.group === "일식") badgeColor = "teal";
                 if (rData.group === "양식") badgeColor = "orange";
 
-                // Build temp object
                 tempSearchedRestaurant = {
                     id: restaurants.length + 1,
                     name: rData.name || queryText,
@@ -833,7 +966,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                     reviews: rData.reviews && rData.reviews.length > 0 ? rData.reviews : ["제미나이가 추천하는 우수 식당입니다.", "훌륭한 한 끼 식사 명소."]
                 };
 
-                // Show confirmation layout fields
                 document.getElementById('confirm-name').innerText = tempSearchedRestaurant.name;
                 document.getElementById('confirm-address').innerText = `주소: ${tempSearchedRestaurant.address}`;
                 document.getElementById('confirm-group').innerText = tempSearchedRestaurant.group;
@@ -841,7 +973,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 document.getElementById('confirm-menu').innerText = tempSearchedRestaurant.mainMenu;
                 document.getElementById('confirm-price').innerText = `${tempSearchedRestaurant.priceLevel} (${tempSearchedRestaurant.price})`;
 
-                // Render views
                 document.getElementById('add-step-loading').classList.add('hidden');
                 document.getElementById('add-step-confirm').classList.remove('hidden');
 
@@ -858,13 +989,11 @@ The field "group" must be exactly one of these six categories: "한식", "중식
             if (!tempSearchedRestaurant) return;
 
             try {
-                // RULE 3: auth guard
                 if (!auth.currentUser) {
                     showAlert("인증 에러", "데이터베이스 인증을 진행 중입니다. 잠시 후 다시 확인을 눌러주세요.");
                     return;
                 }
 
-                // RULE 1: Strict collection path
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'restaurants', tempSearchedRestaurant.id.toString());
                 await setDoc(docRef, tempSearchedRestaurant);
 
@@ -880,12 +1009,10 @@ The field "group" must be exactly one of these six categories: "한식", "중식
         function renderRestaurants() {
             const filtered = restaurants.filter(r => activeCategory === '전체' || r.group === activeCategory);
             
-            // Update counter badge
             document.getElementById('filtered-count').innerText = `${filtered.length}곳`;
 
             const gridContainer = document.getElementById('restaurants-grid');
 
-            // 1. Build List Cards
             gridContainer.innerHTML = '';
             if (filtered.length === 0) {
                 gridContainer.innerHTML = `
@@ -897,7 +1024,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 filtered.forEach(r => {
                     const badgeClass = getBadgeStyles(r.badgeColor);
                     
-                    // 직선거리 연산
                     const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
                     const distStr = formatDistance(dist);
 
@@ -911,33 +1037,27 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                         `;
                     });
 
-                    // 2) 회사와의 거리 정보를 우측 상단 "별점" 아래로 배치
                     const cardHtml = `
                         <div id="restaurant-card-${r.id}" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-md">
                             <div class="p-5">
-                                <!-- Badge and rating/distance column row -->
                                 <div class="flex justify-between items-start mb-3">
                                     <span class="px-2.5 py-1 text-xs font-bold rounded-lg border ${badgeClass}">
                                         ${r.group} (${r.category})
                                     </span>
                                     
-                                    <!-- 우측 상단 별점 및 거리 배치 -->
                                     <div class="flex flex-col items-end space-y-1">
-                                        <!-- 별점 -->
                                         <div class="flex items-center space-x-1 text-amber-500">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                                             </svg>
                                             <span class="text-sm font-bold text-gray-900">${r.rating}</span>
                                         </div>
-                                        <!-- 회사와의 거리 (새 위치) -->
                                         <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 whitespace-nowrap">
                                             🏢 ${distStr}
                                         </span>
                                     </div>
                                 </div>
 
-                                <!-- Restaurant Main Info -->
                                 <h3 class="text-lg font-bold text-gray-900 mb-1 flex items-center space-x-1.5">
                                     <span class="text-sm text-white bg-gray-800 px-2 py-0.5 rounded-md font-mono">${r.id}</span>
                                     <span>${r.name}</span>
@@ -961,7 +1081,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                                     </div>
                                 </div>
 
-                                <!-- Review Block -->
                                 <div class="space-y-1">
                                     <div class="text-xs font-bold text-gray-400 mb-1">인기 방문자리뷰</div>
                                     <ul class="space-y-1.5">
@@ -970,7 +1089,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                                 </div>
                             </div>
 
-                            <!-- Bottom Action Bar -->
                             <div class="grid grid-cols-2 border-t border-gray-100 bg-gray-50/50">
                                 <button onclick="panToRestaurant(${r.id}, ${r.lat}, ${r.lng})" class="py-3 text-center text-xs font-bold text-gray-600 hover:text-emerald-600 transition flex items-center justify-center space-x-1.5 border-r border-gray-100">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -997,7 +1115,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
             const selectedCategory = document.getElementById('compare-filter-category').value;
             let maxPriceVal = document.getElementById('compare-filter-price').value.trim();
             
-            // 3) 0원 미만 차단 제어 로직
             if (maxPriceVal !== "" && parseInt(maxPriceVal) < 0) {
                 document.getElementById('compare-filter-price').value = 0;
                 maxPriceVal = "0";
@@ -1011,7 +1128,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 return matchesCategory && matchesPrice;
             });
 
-            // 매치 개수 갱신
             document.getElementById('matrix-filtered-count').innerText = `검색 결과: ${filtered.length}건`;
 
             const tableBody = document.getElementById('compare-table-body');
@@ -1033,6 +1149,7 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 const dist = getDistance(COMPANY_LAT, COMPANY_LNG, r.lat, r.lng);
                 const distStr = formatDistance(dist);
                 
+                // 1) html2canvas 및 스케일 렌더링 시 카테고리 텍스트 밀림을 완전 방지하기 위해 inline-block 및 whitespace-nowrap 속성 부여
                 const tableRowHtml = `
                     <tr class="hover:bg-gray-50/60 transition">
                         <td class="p-4 whitespace-nowrap font-bold text-gray-900 flex items-center space-x-2">
@@ -1040,11 +1157,11 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                             <span>${r.name}</span>
                         </td>
                         <td class="p-4 whitespace-nowrap">
-                            <span class="px-2 py-0.5 text-xs font-bold rounded-lg border ${badgeClass}">
+                            <span class="px-2.5 py-1 text-xs font-bold rounded-lg border inline-block whitespace-nowrap ${badgeClass}">
                                 ${r.group}
                             </span>
                         </td>
-                        <td class="p-4 font-semibold text-gray-800">${r.mainMenu}</td>
+                        <td class="p-4 font-semibold text-gray-800 whitespace-nowrap">${r.mainMenu}</td>
                         <td class="p-4 whitespace-nowrap text-gray-500 font-medium">${r.priceLevel} <span class="text-xs text-gray-400">(${r.price})</span></td>
                         <td class="p-4 whitespace-nowrap text-emerald-600 font-bold">${distStr}</td>
                     </tr>
@@ -1056,7 +1173,6 @@ The field "group" must be exactly one of these six categories: "한식", "중식
         // Firebase 연동 & 데이터 동기화 (RULE 3 - Auth Before Queries)
         async function startDatabaseSync() {
             try {
-                // Config Load
                 let firebaseConfig;
                 try {
                     firebaseConfig = JSON.parse(__firebase_config);
@@ -1065,13 +1181,11 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                     return;
                 }
 
-                // Initialize services
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-                // RULE 3 - Custom auth token or anonymous token
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     try {
                         await signInWithCustomToken(auth, __initial_auth_token);
@@ -1082,12 +1196,10 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                     await signInAnonymously(auth);
                 }
 
-                // Auth status changed handler
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'restaurants');
                         
-                        // Seed default data if DB collection is empty
                         try {
                             const snapshot = await getDocs(colRef);
                             if (snapshot.empty) {
@@ -1099,14 +1211,12 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                             console.error("Database seed error", initErr);
                         }
 
-                        // Realtime snapshot subscription (RULE 2: Fetch all and sort/filter in JS memory)
                         onSnapshot(colRef, (snapshot) => {
                             const list = [];
                             snapshot.forEach(docSnap => {
                                 list.push(docSnap.data());
                             });
                             
-                            // ID 순서대로 정비례 정렬
                             list.sort((a, b) => a.id - b.id);
                             
                             restaurants.length = 0;
@@ -1140,6 +1250,8 @@ The field "group" must be exactly one of these six categories: "한식", "중식
         window.confirmAndAddRestaurant = confirmAndAddRestaurant;
         window.closeAlert = closeAlert;
         window.filterCompareTable = filterCompareTable;
+        window.validatePassword = validatePassword;
+        window.exportMatrixToImage = exportMatrixToImage;
 
         // App Initializer
         window.onload = function() {
@@ -1155,10 +1267,13 @@ The field "group" must be exactly one of these six categories: "한식", "중식
                 resetMapBounds();
             }, 500);
 
-            // Greet visitor
-            setTimeout(() => {
-                showAlert("영업제도파트 미식 가이드", "실시간 클라우드 DB 연계가 완료되었습니다!\n이제 추가하신 맛집은 회사의 다른 팀원분들에게도 실시간으로 연동되어 함께 열람할 수 있습니다. 🏢");
-            }, 800);
+            // Enter key listener on password input for quick submit
+            document.getElementById('site-passcode').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    validatePassword();
+                }
+            });
+            document.getElementById('site-passcode').focus();
         };
     </script>
 </body>
